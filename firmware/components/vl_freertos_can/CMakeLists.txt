@@ -1,0 +1,11 @@
+if(COMMAND idf_component_register)
+    idf_component_register(SRCS "vl_freertos_can.c" INCLUDE_DIRS "include"
+                           REQUIRES vl_core PRIV_REQUIRES freertos)
+    target_compile_options(${COMPONENT_LIB} PRIVATE -std=gnu11)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE VL_FREERTOS_PREFIXED_HEADERS)
+else()
+    add_library(vehlog_freertos_can STATIC vl_freertos_can.c)
+    target_include_directories(vehlog_freertos_can PUBLIC include)
+    target_link_libraries(vehlog_freertos_can PUBLIC vehlog_core PRIVATE freertos_kernel)
+    set_target_properties(vehlog_freertos_can PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES)
+endif()

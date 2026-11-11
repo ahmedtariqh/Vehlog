@@ -1,0 +1,82 @@
+menu "Vehlog"
+    config VEHLOG_TX_GPIO
+        int "TWAI TX GPIO (-1 disables startup)"
+        range -1 63
+        default -1
+    config VEHLOG_RX_GPIO
+        int "TWAI RX GPIO (-1 disables startup)"
+        range -1 63
+        default -1
+    config VEHLOG_NOMINAL_BPS
+        int "Nominal CAN bitrate (bps)"
+        range 10000 1000000
+        default 500000
+    config VEHLOG_DATA_BPS
+        int "CAN FD data bitrate (0 for no separate data bitrate)"
+        range 0 8000000
+        default 0
+    config VEHLOG_BENCH_SCAN
+        bool "Enable one-shot active scan on an isolated ECU simulator fixture"
+        default n
+        help
+            Requires a physical transmit interlock and an active-low arm input.
+            Do not configure this mode in the field image.
+    config VEHLOG_BENCH_ARM_GPIO
+        int "Bench hardware interlock sense GPIO"
+        depends on VEHLOG_BENCH_SCAN
+        range -1 63
+        default -1
+    config VEHLOG_BENCH_EXTENDED
+        bool "Use 29-bit addressing for the bench scan"
+        depends on VEHLOG_BENCH_SCAN
+        default n
+    config VEHLOG_BENCH_SINGLE_READ
+        bool "Perform one configured physical OBD read instead of PID discovery"
+        depends on VEHLOG_BENCH_SCAN
+        default n
+    if VEHLOG_BENCH_SINGLE_READ
+        config VEHLOG_BENCH_REQUEST_ID
+            hex "Physical CAN request identifier"
+            range 0x0 0x1FFFFFFF
+            default 0x18DA10F1 if VEHLOG_BENCH_EXTENDED
+            default 0x7E0
+        config VEHLOG_BENCH_RESPONSE_ID
+            hex "Physical CAN response identifier"
+            range 0x0 0x1FFFFFFF
+            default 0x18DAF110 if VEHLOG_BENCH_EXTENDED
+            default 0x7E8
+        config VEHLOG_BENCH_SERVICE
+            hex "Read-only service (01, 02, 03, 06, 07, 09, 0A)"
+            range 0x1 0xA
+            default 0x9
+        config VEHLOG_BENCH_SELECTOR
+            hex "PID, monitor ID or information type"
+            range 0x0 0xFF
+            default 0x2
+        config VEHLOG_BENCH_FREEZE_FRAME
+            hex "Mode 02 freeze-frame number"
+            range 0x0 0xFF
+            default 0x0
+        config VEHLOG_BENCH_BLOCK_SIZE
+            int "ISO-TP consecutive frames per block (0 for continuous)"
+            range 0 255
+            default 0
+        config VEHLOG_BENCH_SEPARATION
+            hex "ISO-TP flow-control STmin byte"
+            range 0x0 0xF9
+            default 0xA
+        config VEHLOG_BENCH_ADDRESS_BYTE
+            bool "Use an ISO-TP address byte in addition to the CAN ID"
+            default n
+        config VEHLOG_BENCH_TX_ADDRESS
+            hex "Transmit address byte"
+            depends on VEHLOG_BENCH_ADDRESS_BYTE
+            range 0x0 0xFF
+            default 0x10
+        config VEHLOG_BENCH_RX_ADDRESS
+            hex "Receive address byte"
+            depends on VEHLOG_BENCH_ADDRESS_BYTE
+            range 0x0 0xFF
+            default 0xF1
+    endif
+endmenu

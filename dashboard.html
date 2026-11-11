@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Vehlog · Rental replay</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#edf3f0;background:#111a18;color-scheme:dark;--line:#31463e;--sub:#b0c1b8;--accent:#9af1bb;--panel:#182521}
+*{box-sizing:border-box}body{margin:0}main{max-width:1200px;margin:auto;padding:32px 24px 40px}p{margin:0;color:var(--sub);line-height:1.55}h1,h2{margin:0}h1{font-size:clamp(30px,5vw,52px);letter-spacing:-.055em;line-height:1.1}h2{font-size:18px}
+header{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:25px}.kicker{color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;margin-bottom:6px}
+.badge,.chip{border:1px solid var(--line);color:var(--accent);background:#20342c;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:700;white-space:nowrap}
+.panel,.stat{background:var(--panel);border:1px solid var(--line);border-radius:16px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}.stat{padding:16px}.stat strong{display:block;font-size:26px;margin:5px 0 2px;line-height:1.2}.stat span,.small,small{font-size:12px;color:var(--sub)}.stat strong[data-alert="true"]{color:#ffcf90}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:14px}.panel{padding:18px;min-width:0}.panel-head{display:flex;align-items:start;justify-content:space-between;gap:9px;margin-bottom:12px}
+.route{display:block;width:100%;background:#111e1a;border:1px solid var(--line);border-radius:12px;aspect-ratio:600/285}.route-grid{fill:url(#grid)}.zone{fill:#d2ad70;fill-opacity:.09;stroke:#dcbd87;stroke-dasharray:5 5;stroke-width:1.5}.trace{fill:none;stroke:#9af1bb;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.pin{fill:#9af1bb;stroke:#14271e;stroke-width:3}
+.controls{display:flex;align-items:center;gap:12px;margin:14px 0 8px}button{border:0;border-radius:9px;padding:8px 13px;min-width:78px;background:var(--accent);color:#112b1f;font-weight:800;cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid white;outline-offset:3px}input{width:100%;accent-color:var(--accent);min-width:40px}time{font-variant-numeric:tabular-nums;white-space:nowrap}
+.events{list-style:none;padding:0;margin:0;max-height:395px;overflow:auto}.events li{display:flex;gap:12px;justify-content:space-between;align-items:start;border-top:1px solid var(--line);padding:11px 0}.events li:first-child{border-top:0}.events b{font-size:14px}.events p{font-size:13px;margin:2px 0}.events time{color:#f3c991;font-size:12px}.footer{margin-top:14px;font-size:13px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}.events{max-height:340px}}@media(max-width:520px){main{padding:21px 13px}header{align-items:start}.metrics{grid-template-columns:repeat(2,1fr)}.stat{padding:13px}.panel{padding:13px}.stat strong{font-size:22px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><p class="kicker">Vehlog / Pilot</p><h1>Rental replay</h1><p id="identity"></p></div>
+  <span class="badge">Offline replay</span>
+</header>
+<section class="metrics" aria-label="Rental metrics">
+  <div class="stat"><span>GNSS speed</span><strong id="speed">—</strong><small id="speedLimit"></small></div>
+  <div class="stat"><span>Observed distance</span><strong id="distance">—</strong><small id="mileageLimit"></small></div>
+  <div class="stat"><span>Rental status</span><strong id="status">—</strong><small id="due"></small></div>
+  <div class="stat"><span>Tracker data</span><strong id="freshness">—</strong><small id="age"></small></div>
+</section>
+<div class="grid">
+  <section class="panel" aria-labelledby="routeTitle">
+    <div class="panel-head"><div><h2 id="routeTitle">Trip trace</h2><p class="small">Local projection from recorded fixes</p></div><span class="chip" id="zoneLabel"></span></div>
+    <svg class="route" viewBox="0 0 600 285" role="img" aria-label="Recorded route and circular rental boundary">
+      <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#30453c" opacity=".6"/></pattern></defs>
+      <rect class="route-grid" width="600" height="285"/>
+      <circle id="zone" class="zone"/>
+      <path id="trace" class="trace"/>
+      <circle id="pin" class="pin" r="6" visibility="hidden"/>
+    </svg>
+    <div class="controls">
+      <button id="play" type="button">Play</button>
+      <input id="seek" type="range" aria-label="Replay position" min="0" step="0.001">
+      <time id="clock"></time>
+    </div>
+    <p class="small">Playback runs at 8×. The trace breaks at missing fixes and telemetry gaps.</p>
+  </section>
+  <section class="panel" aria-labelledby="eventsTitle">
+    <div class="panel-head"><div><h2 id="eventsTitle">Rental events</h2><p class="small">Rule alerts and tracker status changes</p></div><span class="chip" id="eventCount"></span></div>
+    <p id="empty">No events at this point in the replay.</p>
+    <ul id="events" class="events"></ul>
+  </section>
+</div>
+<p class="footer">Times shown in UTC. Distance is a GNSS estimate from observed segments. Route exports contain precise location data.</p>
+</main>
+<script type="application/json" id="replay-data">__VEHLOG_DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById('replay-data').textContent);
+const {rental, samples, alerts} = data;
+const $ = id => document.getElementById(id);
+const start = Date.parse(rental.start);
+const due = Date.parse(rental.due);
+const returned = rental.returned ? Date.parse(rental.returned) : Infinity;
+const end = Date.parse(rental.observed_until);
+const time = value => new Date(value).toISOString().slice(11, 19);
+const rounded = (value, places = 1) => Number(value.toFixed(places)).toString();
+const sampleTimes = samples.map(sample => Date.parse(sample.time));
+const alertTimes = alerts.map(alert => Date.parse(alert.time));
+const alertLabels = {speed:'Speed limit', zone:'Rental area', mileage:'Mileage allowance',
+  gap:'Telemetry gap', power:'Vehicle power', return:'Late return'};
+
+function lastIndex(values, cutoff) {
+  let low = 0, high = values.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (values[mid] <= cutoff) low = mid + 1;
+    else high = mid;
+  }
+  return low - 1;
+}
+
+const z = rental.zone;
+function local(fix) {
+  const wrapped = ((fix.lon - z.lon + 540) % 360) - 180;
+  return [wrapped * 111195 * Math.cos(z.lat * Math.PI / 180), (fix.lat - z.lat) * 111195];
+}
+const bounds = {left:-z.radius_m, right:z.radius_m, bottom:-z.radius_m, top:z.radius_m};
+for (const {fix} of samples) {
+  if (!fix) continue;
+  const [x, y] = local(fix);
+  bounds.left = Math.min(bounds.left, x);
+  bounds.right = Math.max(bounds.right, x);
+  bounds.bottom = Math.min(bounds.bottom, y);
+  bounds.top = Math.max(bounds.top, y);
+}
+const scale = Math.min(540 / (bounds.right - bounds.left), 230 / (bounds.top - bounds.bottom));
+const project = ([x, y]) => [
+  (300 + (x - (bounds.right + bounds.left) / 2) * scale).toFixed(1),
+  (142.5 - (y - (bounds.bottom + bounds.top) / 2) * scale).toFixed(1),
+];
+const coordinates = samples.map(({fix}) => fix ? project(local(fix)) : null);
+const [zoneX, zoneY] = project([0, 0]);
+$('zone').setAttribute('cx', zoneX);
+$('zone').setAttribute('cy', zoneY);
+$('zone').setAttribute('r', z.radius_m * scale);
+$('zoneLabel').textContent = rounded(z.radius_m / 1000, 2) + ' km radius';
+$('identity').textContent = rental.id + ' / ' + rental.device + ' / ' + rental.start.slice(0, 10);
+$('speedLimit').textContent = 'Owner limit ' + rental.speed_kph + ' km/h';
+$('mileageLimit').textContent = 'Allowance ' + rental.mileage_km + ' km';
+$('due').textContent = 'Due ' + rental.due.slice(0, 10) + ' ' + time(due);
+$('seek').max = Math.max(0, (end - start) / 1000);
+$('seek').value = $('seek').max;
+let routeIndex = -2, eventIndex = -2;
+
+function renderRoute(index) {
+  if (routeIndex === index) return;
+  routeIndex = index;
+  let path = '', previousFix = false;
+  for (let i = Math.max(0, index - 5999); i <= index; i++) {
+    const xy = coordinates[i];
+    if (xy) path += (previousFix && !samples[i].break_before ? ' L' : ' M') + xy.join(' ');
+    previousFix = Boolean(xy);
+  }
+  $('trace').setAttribute('d', path);
+  const point = coordinates[index];
+  $('pin').setAttribute('visibility', point ? 'visible' : 'hidden');
+  if (point) {
+    $('pin').setAttribute('cx', point[0]);
+    $('pin').setAttribute('cy', point[1]);
+  }
+}
+
+function renderEvents(index) {
+  if (eventIndex === index) return;
+  eventIndex = index;
+  const items = document.createDocumentFragment();
+  for (let i = index; i > Math.max(-1, index - 100); i--) {
+    const alert = alerts[i];
+    const item = document.createElement('li');
+    const copy = document.createElement('div');
+    const title = document.createElement('b');
+    const message = document.createElement('p');
+    const stamp = document.createElement('time');
+    title.textContent = alertLabels[alert.kind];
+    message.textContent = alert.message;
+    stamp.dateTime = alert.time;
+    stamp.textContent = time(alertTimes[i]);
+    copy.append(title, message);
+    item.append(copy, stamp);
+    items.append(item);
+  }
+  $('events').replaceChildren(items);
+  $('empty').hidden = index >= 0;
+  const count = index + 1;
+  $('eventCount').textContent = count > 100 ? '100 of ' + count : count + (count === 1 ? ' event' : ' events');
+}
+
+function render() {
+  const now = start + Number($('seek').value) * 1000;
+  const index = lastIndex(sampleTimes, now);
+  const sample = samples[index];
+  const age = sample ? (now - sampleTimes[index]) / 1000 : Infinity;
+  const checkedIn = now >= returned;
+  const speed = !checkedIn && age <= 10 ? sample?.speed_kph : null;
+  $('clock').textContent = time(now);
+  $('clock').dateTime = new Date(now).toISOString();
+  $('speed').textContent = speed == null ? '—' : rounded(speed) + ' km/h';
+  $('speed').dataset.alert = speed != null && speed > rental.speed_kph;
+  $('distance').textContent = sample ? rounded(sample.distance_km, 3) + ' km' : '—';
+  $('status').textContent = checkedIn ? 'Checked in' : now >= due ? 'Overdue' : 'In rental';
+  $('status').dataset.alert = !checkedIn && now >= due;
+  $('freshness').textContent = checkedIn ? 'Closed' : !sample ? 'Awaiting' : age > 10 ? 'Stale' : 'Recorded';
+  $('age').textContent = sample ? 'Last fix or heartbeat ' + time(sampleTimes[index]) : 'No samples yet';
+  renderRoute(index);
+  $('pin').setAttribute('visibility', !checkedIn && age <= 10 && coordinates[index] ? 'visible' : 'hidden');
+  renderEvents(lastIndex(alertTimes, now));
+}
+
+let playback = null;
+function pause() {
+  if (playback) clearInterval(playback);
+  playback = null;
+  $('play').textContent = 'Play';
+}
+$('play').addEventListener('click', () => {
+  if (playback) return pause();
+  const slider = $('seek');
+  if (Number(slider.value) >= Number(slider.max)) slider.value = 0;
+  const from = Number(slider.value), begin = performance.now();
+  $('play').textContent = 'Pause';
+  render();
+  playback = setInterval(() => {
+    slider.value = Math.min(Number(slider.max), from + (performance.now() - begin) * .008);
+    render();
+    if (Number(slider.value) >= Number(slider.max)) pause();
+  }, 100);
+});
+$('seek').addEventListener('input', () => { pause(); render(); });
+render();
+</script>
+</body>
+</html>

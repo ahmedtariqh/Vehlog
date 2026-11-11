@@ -1,0 +1,18 @@
+{
+  "id": "RENTAL-DEMO",
+  "device": "tracker-demo",
+  "start": "2026-11-09T09:00:00+02:00",
+  "due": "2026-11-09T09:01:06+02:00",
+  "returned": "2026-11-09T09:01:20+02:00",
+  "observed_until": "2026-11-09T09:01:30+02:00",
+  "speed_kph": 70,
+  "speed_tolerance_kph": 5,
+  "speed_seconds": 8,
+  "mileage_km": 0.45,
+  "zone": {
+    "lat": 30.15,
+    "lon": 31.65,
+    "radius_m": 350,
+    "seconds": 8
+  }
+}
